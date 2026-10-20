@@ -42,9 +42,11 @@ Terminal=false
 Categories=Utility;
 EOF
 
-  # Let the user at the local seat create the virtual keyboard (an ACL, not a group grant).
+  # Opt-in: only users the admin adds to the input group may create the virtual keyboard.
+  # They need that group anyway to read the keyboard, so this adds no new kind of access;
+  # uaccess would instead hand keystroke injection to every local user.
   install -Dm644 /dev/stdin "$pkgdir/usr/lib/udev/rules.d/60-$pkgname-uinput.rules" <<EOF
-KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"
+KERNEL=="uinput", SUBSYSTEM=="misc", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"
 EOF
   install -Dm644 /dev/stdin "$pkgdir/usr/lib/modules-load.d/$pkgname.conf" <<EOF
 uinput
