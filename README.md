@@ -118,3 +118,7 @@ python3 -m unittest discover -s tests -t .
 ```
 
 The tests use fake keyboards and layouts. They never touch real input devices.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
