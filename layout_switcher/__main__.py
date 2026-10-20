@@ -5,6 +5,7 @@ import os
 import signal
 import sys
 
+from . import __version__
 from .autoreplace import Autoreplace
 from .daemon import Daemon, Exceptions, Typist, virtual_keyboard
 from .kde_layouts import KdeLayouts
@@ -15,9 +16,10 @@ from .paths import CONFIG_DIR
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="layout_switcher",
+        prog="layout-switcher",
         description="Retypes words typed in the wrong keyboard layout (us <-> ru) on KDE Plasma.",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--no-tray", action="store_true", help="run without the tray icon")
     parser.add_argument(
         "--debug", action="store_true", help="log every switch, including the typed words"

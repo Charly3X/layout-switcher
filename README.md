@@ -18,14 +18,14 @@ Type `ghbdtn` and press Space: the word is erased and retyped as `привет`,
 - KDE Plasma 6 on Wayland. The layout is read and switched over KDE's D-Bus interface `org.kde.keyboard`.
 - The `us` and `ru` layouts configured in KDE. Other layouts (for example `ua`) are left alone.
 - Python 3.11 or newer, plus:
-  - PyQt6 for the tray icon;
   - `aspell` with the English and Russian dictionaries;
-  - `busctl`, which ships with systemd.
+  - `busctl`, which ships with systemd;
+  - PyQt6 for the tray icon. pipx installs it for you; for a clone, install it from your distribution.
 
   On Debian or Ubuntu:
 
   ```sh
-  sudo apt install python3-pyqt6 aspell aspell-en aspell-ru
+  sudo apt install aspell aspell-en aspell-ru python3-pyqt6 pipx
   ```
 
 - Your user in the `input` group, so that the program can read the keyboard and create a virtual one:
@@ -34,9 +34,22 @@ Type `ghbdtn` and press Space: the word is erased and retyped as `привет`,
   sudo usermod -aG input $USER   # then log out and back in
   ```
 
-Everything else is the Python standard library. There is nothing to `pip install`.
+Everything else is the Python standard library.
 
 ## Installation
+
+### With pipx
+
+```sh
+pipx install git+https://github.com/Charly3X/layout-switcher
+layout-switcher
+```
+
+The icon appears in the system tray. To start it automatically, tick **Start at login** in the tray menu. This creates `~/.config/autostart/layout-switcher.desktop`, which KDE's Autostart settings also show.
+
+To update: `pipx upgrade layout-switcher`. To remove: `pipx uninstall layout-switcher`.
+
+### From a clone
 
 ```sh
 git clone https://github.com/Charly3X/layout-switcher.git
@@ -44,7 +57,9 @@ cd layout-switcher
 ./install.sh
 ```
 
-`install.sh` adds "Layout Switcher" to the application menu and starts it in the system tray. To start it automatically, tick **Start at login** in the tray menu. This creates `~/.config/autostart/layout-switcher.desktop`, which KDE's Autostart settings also show.
+`install.sh` adds "Layout Switcher" to the application menu and starts it in the tray. Start at login works the same way.
+
+### First start
 
 The first start takes about 10 seconds: a letter model is built from the aspell dictionaries and cached in `~/.cache/layout_switcher/`.
 
@@ -53,16 +68,18 @@ Only one copy runs at a time. Quit the running one before starting another.
 ## Running by hand
 
 ```sh
-python3 -m layout_switcher            # tray icon
-python3 -m layout_switcher --no-tray  # no icon, for a plain terminal or a service
-python3 -m layout_switcher --debug    # log every fix, including the words
-python3 -m layout_switcher --check ghbdtn hello j,tl   # only print the decisions
+layout-switcher            # tray icon
+layout-switcher --no-tray  # no icon, for a plain terminal or a service
+layout-switcher --debug    # log every fix, including the words
+layout-switcher --check ghbdtn hello j,tl   # only print the decisions
 ```
+
+From a clone without pipx, use `python3 -m layout_switcher` instead of `layout-switcher`.
 
 To pause or resume from a script or a global shortcut:
 
 ```sh
-pkill -USR1 -f "python3 -m layout_switcher"
+pkill -USR1 -f layout_switcher
 ```
 
 ## Configuration

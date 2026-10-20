@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "layout-switcher"
+dynamic = ["version"]
+description = "Punto Switcher-style wrong keyboard layout fixer (English/Russian) for KDE Plasma on Wayland"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Charly3X" }]
+requires-python = ">=3.11"
+dependencies = ["PyQt6>=6.4"]
+keywords = ["kde", "wayland", "keyboard-layout", "punto-switcher"]
+classifiers = [
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "Natural Language :: Russian",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Desktop Environment :: K Desktop Environment (KDE)",
+    "Topic :: Text Processing",
+]
+
+[project.urls]
+Homepage = "https://github.com/Charly3X/layout-switcher"
+Issues = "https://github.com/Charly3X/layout-switcher/issues"
+
+[project.scripts]
+layout-switcher = "layout_switcher.__main__:main"
+
+[tool.setuptools]
+packages = ["layout_switcher"]
+
+[tool.setuptools.dynamic]
+version = { attr = "layout_switcher.__version__" }
