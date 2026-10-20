@@ -10,8 +10,7 @@ from .daemon import Daemon, Exceptions, Typist, virtual_keyboard
 from .kde_layouts import KdeLayouts
 from .keymap import keys_for, render
 from .language import ALPHABETS, AspellChecker, Judge, TrigramModel
-
-LOCK_PATH = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "layout_switcher.lock")
+from .paths import CONFIG_DIR
 
 
 def main():
@@ -40,10 +39,8 @@ def main():
         _check(judge, args.check)
         return
 
-    lock = open(LOCK_PATH, "w")
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+    lock = _single_instance_lock()
+    if lock is None:
         sys.exit("layout_switcher is already running")
 
     keyboard = virtual_keyboard()
@@ -60,6 +57,26 @@ def main():
         pass
     finally:
         keyboard.close()
+
+
+def _single_instance_lock():
+    """A held flock on a private file, or None if another copy holds it."""
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime_dir:
+        directory = runtime_dir
+    else:
+        CONFIG_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+        directory = CONFIG_DIR
+    fd = os.open(os.path.join(directory, "layout_switcher.lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    if os.fstat(fd).st_uid != os.getuid():
+        os.close(fd)
+        sys.exit("layout_switcher: the lock file belongs to another user")
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(fd)
+        return None
+    return fd
 
 
 def _check(judge, texts):
