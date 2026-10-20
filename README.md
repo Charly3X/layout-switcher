@@ -1,5 +1,7 @@
 # Layout Switcher
 
+![Layout Switcher: ghbdtn becomes привет, ye b xnj becomes ну и что, cgc expands to спасибо](docs/banner.png)
+
 Fixes words typed in the wrong keyboard layout (English ↔ Russian) on KDE Plasma under Wayland. It works like Punto Switcher.
 
 Type `ghbdtn` and press Space: the word is erased and retyped as `привет`, and the keyboard switches to the Russian layout. It works in every application: terminals, browsers, messengers, editors.
