@@ -121,11 +121,12 @@ The decision thresholds live in `layout_switcher/language.py` (`Judge.SCORE_MARG
    - a word found in the other layout's dictionary is fixed. For words shorter than four letters, the letter statistics must agree as well, so that `ок` does not turn into `jr`;
    - otherwise, letter-trigram statistics of both layouts are compared, and the word is fixed only by a wide margin.
 3. To fix a word, it switches the layout over D-Bus first, so that a failure deletes nothing. It then sends Backspaces and the same keys again through its own `uinput` virtual keyboard.
-4. Mouse clicks, arrows, Enter, Tab and Ctrl/Alt/Meta shortcuts reset the current word. After Enter it is too late anyway, since a message may already be sent.
+4. Mouse clicks, arrows, Enter, Tab and Ctrl/Alt/Meta shortcuts reset the current word. After Enter it is too late anyway, since a message may already be sent. A word left alone for 30 seconds is forgotten too.
+5. On the lock screen, and while another user's session is in front, keys are neither kept nor acted on. Before every fix, expansion or double Shift, the program asks logind whether the session in front on `seat0` (the one the physical keyboard types into) is yours and unlocked, and asks the KDE screen locker. If either answer is unclear, it does nothing.
 
 ## Limitations
 
-- The program sees every key press, passwords included. It sends nothing anywhere and stores only the exceptions and autoreplace files (both readable by you only). Wayland gives no way to detect a password field, so pause it before typing a password.
+- The program sees every key press, passwords included. It sends nothing anywhere and stores only the exceptions and autoreplace files (both readable by you only). The lock screen is covered (see above), but Wayland gives no way to detect a password field inside an application, so pause the program before typing a password there.
 - If you keep typing straight after the space, the word is not fixed, so that your keys and the program's keys do not interleave. Fix such a word with double Shift. Typing during the fraction of a second that a retype takes can still mix the text.
 - Short words that exist in both dictionaries (`ye`/`ну`, `vs`/`мы`) are fixed only together with the following word. At the end of a phrase, use double Shift.
 - Only the `us` and `ru` layouts are supported.

@@ -44,6 +44,7 @@ class AspellChecker:
     def _process(self, layout):
         process = self._processes.get(layout)
         if process is None or process.poll() is not None:
+            _stop(process)
             process = subprocess.Popen(
                 ["aspell", "-a", f"--lang={_ASPELL_LANG[layout]}", "--encoding=utf-8", "--dont-suggest"],
                 stdin=subprocess.PIPE,

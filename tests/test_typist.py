@@ -286,6 +286,61 @@ class TypistTest(unittest.TestCase):
 
         self.assertEqual(self.keyboard.taps, [])
 
+    def test_ignores_typing_on_a_locked_screen(self):
+        self.typist.session_allows = lambda: False
+        self.type_text("ghbdtn ")
+        self.double_shift()
+
+        self.assertEqual(self.keyboard.taps, [])
+        self.assertEqual(self.judge.asked, [])
+        self.assertEqual(self.typist.word, [])
+
+    def test_a_lock_in_the_middle_of_a_word_stops_the_switch(self):
+        self.type_text("ghb")
+        self.typist.session_allows = lambda: False
+        self.type_text("dtn ")
+
+        self.assertEqual(self.keyboard.taps, [])
+
+    def test_works_again_after_unlocking(self):
+        self.typist.session_allows = lambda: False
+        self.type_text("ghbdtn ")
+        self.typist.session_allows = lambda: True
+        self.clock += 2
+        self.type_text("ghbdtn ")
+
+        self.assertEqual(self.keyboard.typed(), "\b" * 7 + "привет ")
+
+    def test_asks_about_the_session_once_a_second_while_typing_and_before_acting(self):
+        calls = []
+        self.typist.session_allows = lambda: calls.append(self.clock) or True
+        self.type_text("hello ")  # 12 key events, 0.05 s apart: one check at the start, one before acting
+        self.assertEqual(len(calls), 2)
+
+        self.clock += 2
+        self.type_text("x ")  # the check made at "x" is fresh enough to act on at the space
+        self.assertEqual(len(calls), 3)
+
+    def test_a_word_begun_on_the_lock_screen_is_left_alone_after_unlocking(self):
+        self.typist.session_allows = lambda: False
+        self.type_text("ghb")
+        self.typist.session_allows = lambda: True
+        self.clock += 2
+        self.type_text("dtn ")
+
+        self.assertEqual(self.keyboard.taps, [])
+        self.assertEqual(self.judge.asked, [])
+
+        self.type_text("ghbdtn ")
+        self.assertEqual(self.keyboard.typed(), "\b" * 7 + "привет ")
+
+    def test_forgets_a_word_left_alone_for_long(self):
+        self.type_text("ghb")
+        self.clock += 31
+        self.type_text("dtn ")
+
+        self.assertEqual(self.judge.asked, ["dtn"])
+
     def test_keeps_capital_letters_and_trailing_punctuation(self):
         self.judge.switch = {"Ghbdtn?"}
         self.type_text("Ghbdtn?")

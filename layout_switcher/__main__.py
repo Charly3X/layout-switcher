@@ -12,6 +12,7 @@ from .kde_layouts import KdeLayouts
 from .keymap import keys_for, render
 from .language import ALPHABETS, AspellChecker, Judge, TrigramModel
 from .paths import CONFIG_DIR
+from .session import SessionGuard
 
 
 def main():
@@ -46,7 +47,9 @@ def main():
         sys.exit("layout_switcher is already running")
 
     keyboard = virtual_keyboard()
-    daemon = Daemon(Typist(judge, KdeLayouts(), keyboard, Exceptions(), Autoreplace()))
+    typist = Typist(judge, KdeLayouts(), keyboard, Exceptions(), Autoreplace())
+    typist.session_allows = SessionGuard().allows_typing
+    daemon = Daemon(typist)
     try:
         if args.no_tray:
             signal.signal(signal.SIGUSR1, daemon.toggle_pause)

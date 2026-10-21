@@ -23,6 +23,11 @@ MAX_LEAD_IN_WORDS = 4
 RESCAN_INTERVAL = 3.0
 POLL_INTERVAL = 0.5
 LAYOUT_SETTLE_DELAY = 0.05
+# A word left alone this long is not continued by the next key press.
+BUFFER_TIMEOUT = 30.0
+# How long a "session is unlocked" answer is trusted while typing, and right before acting.
+SESSION_RECHECK = 1.0
+SESSION_FRESH = 0.15
 
 
 class Exceptions:
@@ -68,6 +73,14 @@ class Typist:
         self.user_kept_typing = lambda: False
         # Set by Daemon: the keyboard LED, or None when it cannot be read.
         self.read_caps_lock = lambda: None
+        # Set by main: False on a locked screen or while another session is in front.
+        self.session_allows = lambda: True
+        self.locked = False
+        # Part of the current word was typed while locked, so the screen holds more than we saw.
+        self.skip_word = False
+        self.session_checked_at = float("-inf")
+        self.last_key_at = None
+        self._now = 0.0
         self.word = []
         self.last_word = None
         self.last_switch = None
@@ -82,11 +95,21 @@ class Typist:
         self.last_shift_tap = 0.0
 
     def forget(self):
+        self.skip_word = False
         self.word = []
         self.last_word = None
         self.last_switch = None
         self.last_replacement = None
         self.phrase = []
+
+    def _session_ok(self, force=False):
+        """Keys typed on a lock screen or into another user's session are neither kept nor acted on."""
+        if self._now - self.session_checked_at >= (SESSION_FRESH if force else SESSION_RECHECK):
+            self.locked = not self.session_allows()
+            self.session_checked_at = self._now
+            if self.locked:
+                self.forget()
+        return not self.locked
 
     def on_pointer_button(self):
         self.forget()
@@ -99,6 +122,11 @@ class Typist:
 
     def on_key(self, code, value, now=None):
         now = time.monotonic() if now is None else now
+        self._now = now
+        if value != 0:
+            if self.last_key_at is not None and now - self.last_key_at > BUFFER_TIMEOUT:
+                self.forget()
+            self.last_key_at = now
         if code in keymap.SHIFT_KEYS:
             self._on_shift(code, value, now)
             return
@@ -118,6 +146,14 @@ class Typist:
         if code == keymap.KEY_CAPSLOCK:
             if value == 1:
                 self.caps_lock = not self.caps_lock
+            return
+        if not self._session_ok():
+            self.skip_word = code in keymap.TEXT_KEYS or code == keymap.KEY_BACKSPACE
+            return
+        if self.skip_word:
+            # Sit the rest of this word out; any word boundary starts afresh.
+            if code not in keymap.TEXT_KEYS and code != keymap.KEY_BACKSPACE:
+                self.forget()
             return
         if code == keymap.KEY_BACKSPACE:
             if self.word:
@@ -159,6 +195,8 @@ class Typist:
         self.last_word, self.last_switch, self.last_replacement = (keys or None), None, None
         if not keys or self.paused or self.shifts_down or self.combo_modifiers_down:
             self.phrase = []
+            return
+        if not self._session_ok(force=True):
             return
         led = self.read_caps_lock()
         if led is not None:
@@ -250,6 +288,8 @@ class Typist:
 
     def convert_by_hand(self):
         """Double Shift: undo the last expansion, or retype the current or just finished word in the other layout."""
+        if not self._session_ok(force=True):
+            return
         if not self.word and self.last_replacement is not None:
             keys, typed_layout, length = self.last_replacement
             current, names = self.layouts.state()
