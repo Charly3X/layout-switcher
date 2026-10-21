@@ -172,6 +172,13 @@ def dictionary_words(layout):
     return sorted(words)
 
 
+def _starts_with_a_letter_only_there(typed_text, typed_layout, intended_text, other_layout):
+    return (
+        typed_text[:1].lower() not in ALPHABETS[typed_layout]
+        and intended_text[:1].lower() in ALPHABETS[other_layout]
+    )
+
+
 class Judge:
     """Says whether the text typed in `typed_layout` was meant for `other_layout`."""
 
@@ -192,7 +199,11 @@ class Judge:
             return False
         typed = word_core(typed_text, typed_layout)
         if typed is not None and self.checker.is_word(typed, typed_layout):
-            return False
+            # ",then" holds the word "then", but no word starts with a comma: that key is "б",
+            # and "берут" is a word too.
+            return _starts_with_a_letter_only_there(typed_text, typed_layout, intended_text, other_layout) and (
+                self.checker.is_word(intended, other_layout)
+            )
         intended_score = self.models[other_layout].score(intended)
         typed_score = self.models[typed_layout].score(typed) if typed is not None else -math.inf
         short = len(intended) < self.MIN_LETTERS_WITHOUT_DICTIONARY

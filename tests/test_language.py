@@ -40,10 +40,17 @@ class WordCoreTest(unittest.TestCase):
 
 class JudgeTest(unittest.TestCase):
     def setUp(self):
-        self.judge = Judge(FakeChecker({"привет", "hello", "не", "jr", "ок"}), MODELS)
+        self.judge = Judge(FakeChecker({"привет", "hello", "не", "jr", "ок", "then", "берут", "руб", "hen"}), MODELS)
 
     def test_switches_when_the_other_layout_gives_a_dictionary_word(self):
         self.assertTrue(judge_typing(self.judge, "ghbdtn", "us", "ru"))
+
+    def test_a_word_hidden_behind_a_leading_letter_key_is_switched(self):
+        self.assertTrue(judge_typing(self.judge, ",then", "us", "ru"))
+
+    def test_trailing_punctuation_does_not_count(self):
+        self.assertFalse(judge_typing(self.judge, "hen,", "us", "ru"))  # "руб" would be a word
+        self.assertFalse(judge_typing(self.judge, "then", "us", "ru"))
 
     def test_keeps_a_dictionary_word(self):
         self.assertFalse(judge_typing(self.judge, "hello", "us", "ru"))
