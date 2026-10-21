@@ -1,7 +1,7 @@
 # Maintainer: Charly3X <953456+Charly3X@users.noreply.github.com>
 pkgname=plasma-layout-switcher
 _name=layout-switcher
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc="Punto Switcher-style wrong keyboard layout fixer (English/Russian) for KDE Plasma on Wayland"
 arch=('any')
@@ -13,7 +13,7 @@ makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel
 conflicts=('layout-switcher' 'layout-switcher-git')
 install=$pkgname.install
 source=("$_name-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('fb3e8dd11d1d9b5f48425aee35b88ec92a05632dcb492969309415a12075905a')
+sha256sums=('9269f229c34fc23709dea94606839a291001e662990cc4c50ff7f8017f404a3e')
 
 build() {
   cd "$_name-$pkgver"

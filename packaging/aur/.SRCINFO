@@ -1,6 +1,6 @@
 pkgbase = plasma-layout-switcher
 	pkgdesc = Punto Switcher-style wrong keyboard layout fixer (English/Russian) for KDE Plasma on Wayland
-	pkgver = 0.1.0
+	pkgver = 0.1.1
 	pkgrel = 1
 	url = https://github.com/Charly3X/layout-switcher
 	install = plasma-layout-switcher.install
@@ -18,7 +18,7 @@ pkgbase = plasma-layout-switcher
 	depends = systemd
 	conflicts = layout-switcher
 	conflicts = layout-switcher-git
-	source = layout-switcher-0.1.0.tar.gz::https://github.com/Charly3X/layout-switcher/archive/refs/tags/v0.1.0.tar.gz
-	sha256sums = fb3e8dd11d1d9b5f48425aee35b88ec92a05632dcb492969309415a12075905a
+	source = layout-switcher-0.1.1.tar.gz::https://github.com/Charly3X/layout-switcher/archive/refs/tags/v0.1.1.tar.gz
+	sha256sums = 9269f229c34fc23709dea94606839a291001e662990cc4c50ff7f8017f404a3e
 
 pkgname = plasma-layout-switcher
