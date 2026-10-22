@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "layout-switcher"
 dynamic = ["version"]
-description = "Punto Switcher-style wrong keyboard layout fixer (English/Russian) for KDE Plasma on Wayland"
+description = "Punto Switcher-style wrong keyboard layout fixer (English ↔ Russian/Ukrainian) for KDE Plasma on Wayland"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

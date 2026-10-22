@@ -138,7 +138,7 @@ def render():
         draw_example(painter, left, card.top() + 66 + i * 64, typed, fixed, note)
 
     x = margin
-    for chip in ("KDE Plasma", "Wayland", "English ↔ Russian", "Punto Switcher for Linux"):
+    for chip in ("KDE Plasma", "Wayland", "English ↔ Russian / Ukrainian", "Punto Switcher for Linux"):
         x = draw_chip(painter, x, 482, chip)
 
     painter.end()
