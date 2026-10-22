@@ -1,4 +1,8 @@
-"""Render docs/banner.png: the README header and the GitHub social preview (1280x640)."""
+"""Render docs/banner.png: the README header and the GitHub social preview (1280x640).
+
+GitHub topic and search cards crop the preview to about 2.6:1, i.e. roughly
+y 77..563, so everything that matters stays inside that band.
+"""
 
 import os
 import sys
@@ -116,26 +120,26 @@ def render():
     painter.fillRect(image.rect(), gradient)
 
     margin = 88
-    draw_badge(painter, QRectF(margin, 78, 112, 112))
+    draw_badge(painter, QRectF(margin, 110, 100, 100))
 
     painter.setPen(TEXT)
     painter.setFont(font(SANS, 62, QFont.Weight.Bold))
-    painter.drawText(QPointF(margin + 140, 140), "Layout Switcher")
+    painter.drawText(QPointF(margin + 128, 170), "Layout Switcher")
     painter.setPen(MUTED)
     painter.setFont(font(SANS, 27))
-    painter.drawText(QPointF(margin + 142, 184), "Fixes words typed in the wrong keyboard layout")
+    painter.drawText(QPointF(margin + 130, 208), "Fixes words typed in the wrong keyboard layout")
 
-    card = QRectF(margin, 240, WIDTH - 2 * margin, 250)
+    card = QRectF(margin, 236, WIDTH - 2 * margin, 226)
     painter.setPen(QPen(CARD_BORDER, 1.5))
     painter.setBrush(CARD)
     painter.drawRoundedRect(card, 22, 22)
     left = card.center().x() - example_block_width() / 2
     for i, (typed, fixed, note) in enumerate(EXAMPLES):
-        draw_example(painter, left, card.top() + 76 + i * 70, typed, fixed, note)
+        draw_example(painter, left, card.top() + 66 + i * 64, typed, fixed, note)
 
     x = margin
     for chip in ("KDE Plasma", "Wayland", "English ↔ Russian", "Punto Switcher for Linux"):
-        x = draw_chip(painter, x, 530, chip)
+        x = draw_chip(painter, x, 482, chip)
 
     painter.end()
     OUTPUT.parent.mkdir(exist_ok=True)
