@@ -52,6 +52,11 @@ class JudgeTest(unittest.TestCase):
         self.assertFalse(judge_typing(self.judge, "hen,", "us", "ru"))  # "руб" would be a word
         self.assertFalse(judge_typing(self.judge, "then", "us", "ru"))
 
+    def test_keeps_colloquial_words_the_dictionaries_lack(self):
+        self.judge.checker.words.add("of")
+        self.assertFalse(judge_typing(self.judge, "ща", "ru", "us"))
+        self.assertTrue(judge_typing(self.judge, "xt", "us", "ru"))  # "че"
+
     def test_keeps_a_dictionary_word(self):
         self.assertFalse(judge_typing(self.judge, "hello", "us", "ru"))
 

@@ -179,6 +179,18 @@ def _starts_with_a_letter_only_there(typed_text, typed_layout, intended_text, ot
     )
 
 
+# Everyday words and abbreviations that the aspell dictionaries lack.
+COLLOQUIAL_WORDS = {
+    "us": frozenset("""
+        afaik asap btw fyi idk imho imo lol lmao np omg pls plz thx ty wtf
+    """.split()),
+    "ru": frozenset("""
+        ага ваще ес имхо кек кст лол мб нзч ниче норм ок оч пасиб пж пжл
+        плз прив спс угу хз ча че чё ща щас щаз щя
+    """.split()),
+}
+
+
 class Judge:
     """Says whether the text typed in `typed_layout` was meant for `other_layout`."""
 
@@ -193,21 +205,24 @@ class Judge:
         self.checker = checker
         self.models = models
 
+    def _is_word(self, word, layout):
+        return word.lower() in COLLOQUIAL_WORDS[layout] or self.checker.is_word(word, layout)
+
     def wrong_layout(self, typed_text, typed_layout, intended_text, other_layout):
         intended = word_core(intended_text, other_layout)
         if intended is None or len(intended) < self.MIN_LETTERS:
             return False
         typed = word_core(typed_text, typed_layout)
-        if typed is not None and self.checker.is_word(typed, typed_layout):
+        if typed is not None and self._is_word(typed, typed_layout):
             # ",then" holds the word "then", but no word starts with a comma: that key is "б",
             # and "берут" is a word too.
             return _starts_with_a_letter_only_there(typed_text, typed_layout, intended_text, other_layout) and (
-                self.checker.is_word(intended, other_layout)
+                self._is_word(intended, other_layout)
             )
         intended_score = self.models[other_layout].score(intended)
         typed_score = self.models[typed_layout].score(typed) if typed is not None else -math.inf
         short = len(intended) < self.MIN_LETTERS_WITHOUT_DICTIONARY
-        if self.checker.is_word(intended, other_layout):
+        if self._is_word(intended, other_layout):
             # Dictionaries hold plenty of two- and three-letter abbreviations ("jr" for "ок").
             return not short or intended_score > typed_score
         if short:
@@ -223,9 +238,9 @@ class Judge:
             return False
         if len(intended) == 1:
             return intended.lower() in SINGLE_LETTER_WORDS[other_layout]
-        if not self.checker.is_word(intended, other_layout):
+        if not self._is_word(intended, other_layout):
             return False
         typed = word_core(typed_text, typed_layout)
-        if typed is None or not self.checker.is_word(typed, typed_layout):
+        if typed is None or not self._is_word(typed, typed_layout):
             return True
         return self.models[other_layout].score(intended) > self.models[typed_layout].score(typed)
