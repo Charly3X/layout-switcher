@@ -2,13 +2,14 @@
 
 ![Layout Switcher: ghbdtn becomes привет, ye b xnj becomes ну и что, cgc expands to спасибо](docs/banner.png)
 
-Fixes words typed in the wrong keyboard layout (English ↔ Russian) on KDE Plasma under Wayland. It works like Punto Switcher.
+Fixes words typed in the wrong keyboard layout (English ↔ Russian, English ↔ Ukrainian) on KDE Plasma under Wayland. It works like Punto Switcher.
 
 Type `ghbdtn` and press Space: the word is erased and retyped as `привет`, and the keyboard switches to the Russian layout. It works in every application: terminals, browsers, messengers, editors.
 
 ## Features
 
 - **Automatic layout fixing.** When a word ends with a space, the program checks whether it reads better in the other layout. If it does, it retypes the word and switches the layout. Capital letters and trailing punctuation are preserved: `Ghbdtn?` becomes `Привет,`.
+- **Ukrainian too.** With the `ua` layout in KDE and the Ukrainian aspell dictionary installed, `ghbdsn` becomes `привіт`. For a word typed in Latin letters, both the Russian and the Ukrainian reading are checked, and the one that is a word wins. When both are words (`vfvf` → `мама`), the Cyrillic layout you typed in last wins.
 - **Context for short words.** Short words right before a fixed word are fixed together with it if they are words in the other layout too. `ye b xnj` becomes `ну и что`, even though `ye` is an English word and `b` is a single letter.
 - **Manual conversion with double Shift.** Tap Shift twice to retype the current word, or the one you just finished, in the other layout.
 - **Undo that learns.** If a word was fixed by mistake, tap Shift twice right away. The word comes back, and the program remembers it and never fixes it again.
@@ -18,16 +19,16 @@ Type `ghbdtn` and press Space: the word is erased and retyped as `привет`,
 ## Requirements
 
 - KDE Plasma 6 on Wayland. The layout is read and switched over KDE's D-Bus interface `org.kde.keyboard`.
-- The `us` and `ru` layouts configured in KDE. Other layouts (for example `ua`) are left alone.
+- The `us` layout and at least one of `ru` and `ua` configured in KDE. Other layouts are left alone.
 - Python 3.11 or newer, plus:
-  - `aspell` with the English and Russian dictionaries;
+  - `aspell` with the English and Russian dictionaries, plus the Ukrainian one for Ukrainian;
   - `busctl`, which ships with systemd;
   - PyQt6 for the tray icon. pipx installs it for you; for a clone, install it from your distribution.
 
   On Debian or Ubuntu:
 
   ```sh
-  sudo apt install aspell aspell-en aspell-ru python3-pyqt6 pipx
+  sudo apt install aspell aspell-en aspell-ru aspell-uk python3-pyqt6 pipx
   ```
 
 - Your user in the `input` group, so that the program can read the keyboard and create a virtual one:
@@ -100,7 +101,7 @@ email = name@example.com
 - An entry expands when you type a space after it. Surrounding punctuation stays: `thx!` → `thanks!`.
 - The case follows the abbreviation: `Thx` → `Thanks`, `THX` → `THANKS`.
 - An abbreviation typed in the wrong layout expands too: `cgc` → `спасибо`, and the keyboard switches to Russian. This does not happen when what you typed is a real word in the current layout.
-- A replacement can mix Russian, English, digits and punctuation. The program switches layouts as it types and returns to the abbreviation's layout at the end.
+- A replacement can mix Russian, Ukrainian, English, digits and punctuation. The program switches layouts as it types and returns to the abbreviation's layout at the end.
 - Double Shift right after an expansion brings the abbreviation back.
 - Changes apply immediately; no restart is needed.
 - Replacements are single-line. Characters that neither layout has (`ł`, `€`) are not supported: such an entry is skipped with a warning in the log.
@@ -129,7 +130,7 @@ The decision thresholds live in `layout_switcher/language.py` (`Judge.SCORE_MARG
 - The program sees every key press, passwords included. It sends nothing anywhere and stores only the exceptions and autoreplace files (both readable by you only). The lock screen is covered (see above), but Wayland gives no way to detect a password field inside an application, so pause the program before typing a password there.
 - If you keep typing straight after the space, the word is not fixed, so that your keys and the program's keys do not interleave. Fix such a word with double Shift. Typing during the fraction of a second that a retype takes can still mix the text.
 - Short words that exist in both dictionaries (`ye`/`ну`, `vs`/`мы`) are fixed only together with the following word. At the end of a phrase, use double Shift.
-- Only the `us` and `ru` layouts are supported.
+- Only the `us`, `ru` and `ua` layouts are supported. A Ukrainian word typed in the Russian layout, or the other way round, is not fixed.
 
 ## Development
 

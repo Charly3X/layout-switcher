@@ -10,7 +10,7 @@ from .autoreplace import Autoreplace
 from .daemon import Daemon, Exceptions, Typist, virtual_keyboard
 from .kde_layouts import KdeLayouts
 from .keymap import keys_for, render
-from .language import ALPHABETS, AspellChecker, Judge, TrigramModel
+from .language import ALPHABETS, AspellChecker, Judge, TrigramModel, aspell_layouts
 from .paths import CONFIG_DIR
 from .session import SessionGuard
 
@@ -18,7 +18,7 @@ from .session import SessionGuard
 def main():
     parser = argparse.ArgumentParser(
         prog="layout-switcher",
-        description="Retypes words typed in the wrong keyboard layout (us <-> ru) on KDE Plasma.",
+        description="Retypes words typed in the wrong keyboard layout (us <-> ru, us <-> ua) on KDE Plasma.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--no-tray", action="store_true", help="run without the tray icon")
@@ -37,7 +37,7 @@ def main():
         format="%(asctime)s %(levelname)s %(message)s",
     )
 
-    judge = Judge(AspellChecker(), {layout: TrigramModel.for_layout(layout) for layout in ("us", "ru")})
+    judge = Judge(AspellChecker(), {layout: TrigramModel.for_layout(layout) for layout in _dictionary_layouts()})
     if args.check:
         _check(judge, args.check)
         return
@@ -53,6 +53,7 @@ def main():
     try:
         if args.no_tray:
             signal.signal(signal.SIGUSR1, daemon.toggle_pause)
+            signal.signal(signal.SIGTERM, _interrupt)
             daemon.run()
         else:
             from .tray import run_with_tray
@@ -61,7 +62,12 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        typist.flush()
         keyboard.close()
+
+
+def _interrupt(*_):
+    raise KeyboardInterrupt
 
 
 def _single_instance_lock():
@@ -84,14 +90,34 @@ def _single_instance_lock():
     return fd
 
 
+def _dictionary_layouts():
+    available = aspell_layouts()
+    if "us" not in available or not available & {"ru", "ua"}:
+        sys.exit("layout_switcher needs the English aspell dictionary and the Russian or Ukrainian one")
+    for layout, package in (("ru", "aspell-ru"), ("ua", "aspell-uk")):
+        if layout not in available:
+            logging.info("no %s: words in the %s layout are not fixed", package, layout)
+    return sorted(available)
+
+
 def _check(judge, texts):
     for text in texts:
-        layout = "ru" if any(c.lower() in ALPHABETS["ru"] for c in text) else "us"
-        other = "us" if layout == "ru" else "ru"
+        letters = {c.lower() for c in text}
+        if letters & (ALPHABETS["ua"] - ALPHABETS["ru"]):
+            layout = "ua"
+        elif letters & ALPHABETS["ru"]:
+            # Letters both alphabets share: read them in whichever has a dictionary.
+            layout = "ru" if judge.supports("ru") or not letters <= ALPHABETS["ua"] else "ua"
+        else:
+            layout = "us"
         keys = keys_for(text, layout)
-        intended = render(keys, other)
-        verdict = judge.wrong_layout(render(keys, layout), layout, intended, other)
-        print(f"{text} -> {intended if verdict else 'keep'}")
+        targets = [name for name in ("ru", "ua") if judge.supports(name)] if layout == "us" else ["us"]
+        if layout != "us" and not judge.supports(layout):
+            print(f"{text} -> keep (no {layout} dictionary)")
+            continue
+        readings = [(name, render(keys, name)) for name in targets]
+        chosen = judge.best_target(render(keys, layout), layout, readings)
+        print(f"{text} -> {chosen[1] if chosen else 'keep'}")
 
 
 if __name__ == "__main__":

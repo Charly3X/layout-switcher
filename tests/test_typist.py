@@ -61,10 +61,21 @@ class FakeJudge:
         self.meant = set(meant)
         self.asked = []
         self.checker = FakeChecker()
+        self.layouts = {"us", "ru"}
+        self.targets = {"us", "ru"}
 
-    def wrong_layout(self, typed_text, typed_layout, intended_text, other_layout):
+    def supports(self, layout):
+        return layout in self.layouts
+
+    def is_word(self, word, layout):
+        return self.checker.is_word(word, layout)
+
+    def best_target(self, typed_text, typed_layout, readings):
+        """Switch to the first reading whose layout the test allows, if the typed text is listed."""
         self.asked.append(typed_text)
-        return typed_text in self.switch
+        if typed_text not in self.switch:
+            return None
+        return next(((layout, text) for layout, text in readings if layout in self.targets), None)
 
     def could_be_meant(self, typed_text, typed_layout, intended_text, other_layout):
         return intended_text in self.meant
@@ -341,6 +352,46 @@ class TypistTest(unittest.TestCase):
 
         self.assertEqual(self.judge.asked, ["dtn"])
 
+    def test_switches_to_ukrainian_when_that_reading_is_chosen(self):
+        self.layouts._names = ["us", "ru", "ua"]
+        self.judge.layouts.add("ua")
+        self.judge.targets = {"ua"}
+        self.judge.switch = {"ghbdsn"}
+        self.type_text("ghbdsn ")
+
+        self.assertEqual(self.keyboard.typed(), "\b" * 7 + "привіт ")
+        self.assertEqual(self.layouts.current(), "ua")
+
+    def test_the_cyrillic_layout_typed_in_last_comes_first(self):
+        self.layouts._names = ["us", "ru", "ua"]
+        self.judge.layouts.add("ua")
+        self.judge.targets = {"ru", "ua"}
+        self.type_text("ghbdtn ")
+        self.assertEqual(self.layouts.current(), "ru")
+
+        self.layouts.activate("ua")
+        self.type_text("так ", "ua")
+        self.layouts.activate("us")
+        self.keyboard.taps.clear()
+        self.type_text("ghbdtn ")
+        self.assertEqual(self.layouts.current(), "ua")
+
+    def test_double_shift_from_english_goes_to_the_preferred_cyrillic_layout(self):
+        self.layouts._names = ["us", "ru", "ua"]
+        self.typist.preferred_cyrillic = "ua"
+        self.type_text("ghbdsn")
+        self.double_shift()
+
+        self.assertEqual(self.keyboard.typed(), "\b" * 6 + "привіт")
+
+    def test_a_ukrainian_layout_without_a_dictionary_is_left_alone(self):
+        self.layouts._names = ["us", "ua"]
+        self.layouts.activate("ua")
+        self.type_text("руддщ ", "ua")
+
+        self.assertEqual(self.keyboard.taps, [])
+        self.assertEqual(self.judge.asked, [])
+
     def test_keeps_capital_letters_and_trailing_punctuation(self):
         self.judge.switch = {"Ghbdtn?"}
         self.type_text("Ghbdtn?")
@@ -409,12 +460,72 @@ class TypistTest(unittest.TestCase):
 
         self.assertEqual(self.keyboard.typed(), "\b" * 7 + "привет " + "\b" * 7 + "ghbdtn ")
         self.assertEqual(self.layouts.current(), "us")
-        self.assertIn(("us", "ghbdtn"), self.exceptions)
 
         self.keyboard.taps.clear()
         self.type_text("ghbdtn")
         self.tap(keymap.KEY_SPACE)
         self.assertEqual(self.keyboard.taps, [])
+        self.assertIn(("us", "ghbdtn"), self.exceptions)
+
+    def test_pressing_again_after_an_undo_is_not_an_exception(self):
+        self.type_text("ghbdtn ")
+        self.double_shift()
+        self.double_shift()
+        self.type_text("vbh ")
+
+        self.assertEqual(self.keyboard.typed(), "\b" * 7 + "привет " + "\b" * 7 + "ghbdtn " + "\b" * 7 + "привет ")
+        self.assertNotIn(("us", "ghbdtn"), self.exceptions)
+
+    def test_double_shift_offers_the_other_cyrillic_spelling_after_an_undo(self):
+        self.judge.layouts.add("ua")
+        self.judge.switch = {"'nj"}
+        self.type_text("'nj ")  # "это"
+        self.double_shift()     # back to "'nj"
+        self.double_shift()     # "єто": Ukrainian spells it differently
+        self.double_shift()     # back again
+        self.double_shift()     # "это" once both were shown
+
+        self.assertEqual(
+            self.keyboard.typed(),
+            "\b" * 4 + "это " + "\b" * 4 + "'nj " + "\b" * 4 + "єто " + "\b" * 4 + "'nj " + "\b" * 4 + "это ",
+        )
+
+    def test_one_press_undoes_a_switch_from_cyrillic_to_english(self):
+        self.judge.layouts.add("ua")
+        self.judge.switch = {"ыдууз"}
+        self.layouts.activate("ru")
+        self.type_text("ыдууз ", "ru")  # "sleep"; the s key is ы in ru and і in ua
+        self.double_shift()
+
+        self.assertEqual(self.keyboard.typed(), "\b" * 6 + "sleep " + "\b" * 6 + "ыдууз ")
+        self.assertEqual(self.layouts.current(), "ru")
+
+        self.type_text("x")
+        self.assertIn(("ru", "ыдууз"), self.exceptions)
+
+    def test_an_unsaved_exception_does_not_stop_the_typist(self):
+        self.type_text("ghbdtn ")
+        self.double_shift()
+        self.exceptions.add = mock.Mock(side_effect=OSError("disk full"))
+        with self.assertLogs("layout_switcher", "WARNING"):
+            self.type_text("x")
+
+        self.assertEqual(self.typist.word, [(45, False)])
+
+    def test_an_undo_is_remembered_on_exit(self):
+        self.type_text("ghbdtn ")
+        self.double_shift()
+        self.typist.flush()
+
+        self.assertIn(("us", "ghbdtn"), self.exceptions)
+
+    def test_one_press_undoes_even_with_two_cyrillic_layouts(self):
+        self.type_text("ghbdtn ")  # "привет" reads the same in ua
+        self.double_shift()
+        self.double_shift()
+
+        self.assertEqual(self.keyboard.typed(), "\b" * 7 + "привет " + "\b" * 7 + "ghbdtn " + "\b" * 7 + "привет ")
+        self.assertEqual(self.layouts.current(), "ru")
 
     def test_slow_shift_presses_are_not_a_double_shift(self):
         self.type_text("hello")

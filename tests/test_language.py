@@ -14,7 +14,7 @@ class FakeChecker:
 
 MODELS = {
     "us": TrigramModel(TrigramModel.count(["hello", "help", "world", "word", "kernel", "grep", "github"])),
-    "ru": TrigramModel(TrigramModel.count(["привет", "приветик", "мир", "дела", "москва", "обед", "обеда"])),
+    "ru": TrigramModel(TrigramModel.count(["привет", "приветик", "мир", "дела", "москва", "обед", "обеда", "мама"])),
 }
 
 
@@ -82,6 +82,47 @@ class JudgeTest(unittest.TestCase):
     def test_switches_words_broken_by_punctuation_only_if_the_other_reading_is_plausible(self):
         self.assertTrue(judge_typing(self.judge, "j,tlf", "us", "ru"))
         self.assertFalse(judge_typing(self.judge, "foo,bar", "us", "ru"))
+
+
+class LayoutChecker:
+    def __init__(self, **words):
+        self.words = words
+
+    def is_word(self, word, layout):
+        return word.lower() in self.words.get(layout, ())
+
+
+class UkrainianTest(unittest.TestCase):
+    def setUp(self):
+        models = dict(MODELS)
+        models["ua"] = TrigramModel(TrigramModel.count(["привіт", "мама", "дякую", "їжак", "місто"]))
+        self.judge = Judge(LayoutChecker(ru={"мама"}, ua={"привіт", "мама", "дякую", "м'ясо"}), models)
+
+    def best(self, typed, readings_layouts=("ru", "ua")):
+        keys = keys_for(typed, "us")
+        readings = [(layout, render(keys, layout)) for layout in readings_layouts]
+        return self.judge.best_target(render(keys, "us"), "us", readings)
+
+    def test_ukrainian_keys(self):
+        self.assertEqual(render(keys_for("ghbdsn", "us"), "ua"), "привіт")
+        self.assertEqual(render(keys_for("v`zcj", "us"), "ua"), "м'ясо")
+        self.assertEqual(render(keys_for("'}|", "us"), "ua"), "єЇҐ")
+
+    def test_the_reading_that_is_a_word_wins(self):
+        self.assertEqual(self.best("ghbdsn"), ("ua", "привіт"))
+        self.assertEqual(self.best("lzre."), ("ua", "дякую"))
+
+    def test_the_apostrophe_belongs_to_ukrainian_words(self):
+        self.assertEqual(self.best("v`zcj"), ("ua", "м'ясо"))
+
+    def test_a_word_of_both_languages_goes_to_the_reading_listed_first(self):
+        self.assertEqual(self.best("vfvf", ("ru", "ua")), ("ru", "мама"))
+        self.assertEqual(self.best("vfvf", ("ua", "ru")), ("ua", "мама"))
+
+    def test_layouts_without_a_dictionary_are_not_words(self):
+        judge = Judge(FakeChecker({"привіт"}), MODELS)
+        self.assertFalse(judge.supports("ua"))
+        self.assertFalse(judge.is_word("привіт", "ua"))
 
 
 class AspellCheckerTest(unittest.TestCase):

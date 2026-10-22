@@ -15,8 +15,8 @@ from .paths import CONFIG_DIR
 
 log = logging.getLogger("layout_switcher")
 
-LATIN, CYRILLIC = "us", "ru"
-OTHER = {LATIN: CYRILLIC, CYRILLIC: LATIN}
+LATIN = "us"
+CYRILLIC = ("ru", "ua")
 
 DOUBLE_SHIFT_WINDOW = 0.4
 MAX_LEAD_IN_WORDS = 4
@@ -87,6 +87,12 @@ class Typist:
         # (typed keys, layout they were typed in, length of the text that replaced them)
         self.last_replacement = None
         self.phrase = []
+        # The Cyrillic layout typed in last: it wins when a word reads the same in Russian and Ukrainian.
+        self.preferred_cyrillic = None
+        # Layouts the last word has been shown in by switches and double Shift.
+        self.chain = []
+        # An undone automatic switch, remembered as an exception once the user moves on.
+        self.pending_exception = None
         self.shifts_down = set()
         self.combo_modifiers_down = set()
         self.caps_lock = False
@@ -95,6 +101,7 @@ class Typist:
         self.last_shift_tap = 0.0
 
     def forget(self):
+        self._settle_word()
         self.skip_word = False
         self.word = []
         self.last_word = None
@@ -110,6 +117,20 @@ class Typist:
             if self.locked:
                 self.forget()
         return not self.locked
+
+    def _settle_word(self):
+        """The user moved on from the last word: keep an undo for good and start a fresh chain."""
+        pending, self.pending_exception = self.pending_exception, None
+        self.chain = []
+        if pending is not None:
+            try:
+                self.exceptions.add(*pending)
+            except OSError as error:
+                log.warning("cannot save an exception: %s", error)
+
+    def flush(self):
+        """Called on exit: an undo the user made last is still worth remembering."""
+        self._settle_word()
 
     def on_pointer_button(self):
         self.forget()
@@ -156,6 +177,7 @@ class Typist:
                 self.forget()
             return
         if code == keymap.KEY_BACKSPACE:
+            self._settle_word()
             if self.word:
                 self.word.pop()
             else:
@@ -165,6 +187,7 @@ class Typist:
             self._on_word_end()
             return
         if code in keymap.TEXT_KEYS:
+            self._settle_word()
             self.word.append((code, bool(self.shifts_down)))
             self.last_word = None
             self.last_switch = None
@@ -192,6 +215,7 @@ class Typist:
 
     def _on_word_end(self):
         keys, self.word = self.word, []
+        self._settle_word()
         self.last_word, self.last_switch, self.last_replacement = (keys or None), None, None
         if not keys or self.paused or self.shifts_down or self.combo_modifiers_down:
             self.phrase = []
@@ -202,27 +226,40 @@ class Typist:
         if led is not None:
             self.caps_lock = led
         typed_layout, names = self.layouts.state()
+        if typed_layout in CYRILLIC:
+            self.preferred_cyrillic = typed_layout
         if self._expand_abbreviation(keys, typed_layout, names):
             self.phrase = []
             return
-        switched = (
-            typed_layout in OTHER
-            and OTHER[typed_layout] in names
-            and self._switch_if_wrong(keys, typed_layout, names)
-        )
-        if switched:
+        if self._switch_if_wrong(keys, typed_layout, names):
             self.phrase = []
         else:
             self.phrase = (self.phrase + [(keys, typed_layout)])[-MAX_LEAD_IN_WORDS:]
 
+    def _cyrillic_by_preference(self, names):
+        present = [layout for layout in names if layout in CYRILLIC]
+        return sorted(present, key=lambda layout: layout != self.preferred_cyrillic)
+
+    def _targets(self, typed_layout, names):
+        """Layouts that a word typed in `typed_layout` may have been meant for, most likely first."""
+        if typed_layout == LATIN:
+            return [layout for layout in self._cyrillic_by_preference(names) if self.judge.supports(layout)]
+        if typed_layout in CYRILLIC and LATIN in names and self.judge.supports(typed_layout):
+            return [LATIN]
+        return []
+
     def _switch_if_wrong(self, keys, typed_layout, names):
-        other = OTHER[typed_layout]
+        targets = self._targets(typed_layout, names)
+        if not targets:
+            return False
         typed_text = keymap.render(keys, typed_layout, self.caps_lock)
         if (typed_layout, typed_text) in self.exceptions:
             return False
-        intended_text = keymap.render(keys, other, self.caps_lock)
-        if not self.judge.wrong_layout(typed_text, typed_layout, intended_text, other):
+        readings = [(layout, keymap.render(keys, layout, self.caps_lock)) for layout in targets]
+        chosen = self.judge.best_target(typed_text, typed_layout, readings)
+        if chosen is None:
             return False
+        other, intended_text = chosen
         words = self._lead_in(typed_layout, other) + [keys]
         retyped = _join_words(words)
         if not self._retype(retyped, typed_layout, other, names, trailing_space=True):
@@ -231,6 +268,9 @@ class Typist:
         log.debug("switched %d word(s) ending with %r -> %r", len(words), typed_text, intended_text)
         self.last_word = retyped
         self.last_switch = (typed_layout, typed_text)
+        self.chain = [typed_layout, other]
+        if other in CYRILLIC:
+            self.preferred_cyrillic = other
         self.on_switch()
         return True
 
@@ -249,8 +289,7 @@ class Typist:
 
     def _expand_abbreviation(self, keys, typed_layout, names):
         """Replace an abbreviation from the user's list, also when typed in the wrong layout."""
-        readings = [typed_layout, OTHER.get(typed_layout)]
-        for layout in readings:
+        for layout in [typed_layout] + self._targets(typed_layout, names):
             if layout not in keymap.LAYOUTS or layout not in names:
                 continue
             text = keymap.render(keys, layout, self.caps_lock)
@@ -264,7 +303,7 @@ class Typist:
                 continue
             if layout != typed_layout:
                 typed = word_core(keymap.render(keys, typed_layout, self.caps_lock), typed_layout)
-                if typed is not None and self.judge.checker.is_word(typed, typed_layout):
+                if typed is not None and self.judge.is_word(typed, typed_layout):
                     continue
             new_text = f"{before}{replacement}{after} "
             plan = keymap.typing_plan(new_text, layout, self.caps_lock)
@@ -306,12 +345,37 @@ class Typist:
         else:
             return
         current, names = self.layouts.state()
-        target = OTHER.get(current, LATIN)
+        shown = self.chain or [current]
+        if self.last_switch is not None and shown == [self.last_switch[0], current]:
+            # The first press after an automatic switch always undoes it.
+            target = self.last_switch[0]
+        elif current == LATIN:
+            options = self._cyrillic_by_preference(names)
+            seen = {keymap.render(keys, layout) for layout in shown if layout in keymap.LAYOUTS}
+            # After "это" was undone, the next press offers "єто" before "это" again.
+            fresh = [layout for layout in options if keymap.render(keys, layout) not in seen]
+            if fresh:
+                target = fresh[0]
+            else:
+                # Every spelling shown already: take turns among the layouts that showed one,
+                # the longest ago first. A layout that spells the word the same is left out.
+                last_shown = {layout: i for i, layout in enumerate(shown)}
+                used = [layout for layout in options if layout in last_shown]
+                target = min(used, key=last_shown.get) if used else next(iter(options), None)
+        else:
+            target = LATIN
         if target not in names or not self._retype(keys, current, target, names, trailing_space):
             return
-        if trailing_space and self.last_switch is not None:
-            self.exceptions.add(*self.last_switch)
-        self.last_switch = None
+        if target in CYRILLIC:
+            self.preferred_cyrillic = target
+        self.chain = shown + [target]
+        if not trailing_space or self.last_switch is None:
+            return
+        if target == self.last_switch[0]:
+            # Turned back to what was typed: wrong, unless the next press picks another language.
+            self.pending_exception = self.last_switch
+        else:
+            self.pending_exception = None
 
     def _retype(self, keys, current_layout, target_layout, names, trailing_space):
         typed = keys + [(keymap.KEY_SPACE, False)] if trailing_space else keys

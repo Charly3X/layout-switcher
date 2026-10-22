@@ -45,6 +45,11 @@ _ROWS = {
         53: ".,",
     },
 }
+# KDE's default Ukrainian layout (xkb "ua", variant "unicode") differs from Russian in five keys.
+_ROWS["ua"] = {
+    **_ROWS["ru"],
+    27: "їЇ", 31: "іІ", 40: "єЄ", 41: "'ʼ", 43: "ґҐ",
+}
 
 LAYOUTS = tuple(_ROWS)
 TEXT_KEYS = frozenset(_ROWS["us"])
@@ -79,6 +84,15 @@ def _lookup(layout):
 _LOOKUPS = {layout: _lookup(layout) for layout in LAYOUTS}
 
 
+def _reach(text, start, layout):
+    count = 0
+    for char in text[start:]:
+        if char not in _LOOKUPS[layout]:
+            break
+        count += 1
+    return count
+
+
 def typing_plan(text, start_layout, caps_lock=False):
     """[(layout, keys)] runs that type `text`, switching layout only when a character needs it.
 
@@ -86,11 +100,13 @@ def typing_plan(text, start_layout, caps_lock=False):
     """
     layout = start_layout if start_layout in _ROWS else LAYOUTS[0]
     runs = []
-    for char in text:
+    for i, char in enumerate(text):
         if char not in _LOOKUPS[layout]:
-            layout = next((name for name in LAYOUTS if char in _LOOKUPS[name]), None)
-            if layout is None:
+            able = [name for name in LAYOUTS if char in _LOOKUPS[name]]
+            if not able:
                 return None
+            # Switch to the layout that types the longest stretch from here.
+            layout = max(able, key=lambda name: (_reach(text, i, name), name == start_layout))
         code, shifted = _LOOKUPS[layout][char]
         if caps_lock and char.isalpha():
             shifted = not shifted

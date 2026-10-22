@@ -11,12 +11,23 @@ from pathlib import Path
 ALPHABETS = {
     "us": frozenset("abcdefghijklmnopqrstuvwxyz"),
     "ru": frozenset("абвгдеёжзийклмнопрстуфхцчшщъыьэюя"),
+    "ua": frozenset("абвгґдеєжзиіїйклмнопрстуфхцчшщьюя"),
 }
-_INNER_JOINERS = {"us": frozenset("-'"), "ru": frozenset("-")}
-_ASPELL_LANG = {"us": "en", "ru": "ru"}
-SINGLE_LETTER_WORDS = {"us": frozenset("ai"), "ru": frozenset("абвжикосуя")}
+_INNER_JOINERS = {"us": frozenset("-'"), "ru": frozenset("-"), "ua": frozenset("-'ʼ")}
+_ASPELL_LANG = {"us": "en", "ru": "ru", "ua": "uk"}
+SINGLE_LETTER_WORDS = {"us": frozenset("ai"), "ru": frozenset("абвжикосуя"), "ua": frozenset("абвжзйіоуя")}
 
 CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "layout_switcher"
+
+
+def aspell_layouts():
+    """Layouts whose aspell dictionary is installed."""
+    try:
+        result = subprocess.run(["aspell", "dump", "dicts"], capture_output=True, text=True, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return set()
+    installed = set(result.stdout.split())
+    return {layout for layout, lang in _ASPELL_LANG.items() if lang in installed}
 
 
 def word_core(text, layout):
@@ -188,6 +199,9 @@ COLLOQUIAL_WORDS = {
         ага ваще ес имхо кек кст лол мб нзч ниче норм ок оч пасиб пж пжл
         плз прив спс угу хз ча че чё ща щас щаз щя
     """.split()),
+    "ua": frozenset("""
+        ага кек лол мб норм ок пж спс хз шо
+    """.split()),
 }
 
 
@@ -200,36 +214,64 @@ class Judge:
     SCORE_MARGIN = 1.5
     # Typical words score above this; keyboard mash scores far below.
     PLAUSIBLE_SCORE = -3.0
+    # How sure a verdict is: the other reading is a word, or it only looks like one.
+    DICTIONARY, STATISTICS = 2, 1
 
     def __init__(self, checker, models):
         self.checker = checker
         self.models = models
 
-    def _is_word(self, word, layout):
+    def supports(self, layout):
+        return layout in self.models
+
+    def is_word(self, word, layout):
+        if not self.supports(layout):
+            return False
         return word.lower() in COLLOQUIAL_WORDS[layout] or self.checker.is_word(word, layout)
 
     def wrong_layout(self, typed_text, typed_layout, intended_text, other_layout):
+        return self.confidence(typed_text, typed_layout, intended_text, other_layout) is not None
+
+    def confidence(self, typed_text, typed_layout, intended_text, other_layout):
+        """None to keep the word, else (DICTIONARY, 0) or (STATISTICS, margin)."""
         intended = word_core(intended_text, other_layout)
         if intended is None or len(intended) < self.MIN_LETTERS:
-            return False
+            return None
         typed = word_core(typed_text, typed_layout)
-        if typed is not None and self._is_word(typed, typed_layout):
+        if typed is not None and self.is_word(typed, typed_layout):
             # ",then" holds the word "then", but no word starts with a comma: that key is "б",
             # and "берут" is a word too.
-            return _starts_with_a_letter_only_there(typed_text, typed_layout, intended_text, other_layout) and (
-                self._is_word(intended, other_layout)
-            )
+            hidden = _starts_with_a_letter_only_there(typed_text, typed_layout, intended_text, other_layout)
+            return (self.DICTIONARY, 0) if hidden and self.is_word(intended, other_layout) else None
         intended_score = self.models[other_layout].score(intended)
         typed_score = self.models[typed_layout].score(typed) if typed is not None else -math.inf
         short = len(intended) < self.MIN_LETTERS_WITHOUT_DICTIONARY
-        if self._is_word(intended, other_layout):
+        if self.is_word(intended, other_layout):
             # Dictionaries hold plenty of two- and three-letter abbreviations ("jr" for "ок").
-            return not short or intended_score > typed_score
+            return (self.DICTIONARY, 0) if not short or intended_score > typed_score else None
         if short:
-            return False
+            return None
         if typed is None:
-            return intended_score > self.PLAUSIBLE_SCORE
-        return intended_score - typed_score > self.SCORE_MARGIN
+            return (self.STATISTICS, intended_score) if intended_score > self.PLAUSIBLE_SCORE else None
+        margin = intended_score - typed_score
+        return (self.STATISTICS, margin) if margin > self.SCORE_MARGIN else None
+
+    def best_target(self, typed_text, typed_layout, readings):
+        """The (layout, text) of `readings`, most likely first, that the user meant, or None.
+
+        A dictionary word beats statistics; among dictionary words the earlier reading wins
+        ("мама" is Russian and Ukrainian alike), among statistics the wider margin.
+        """
+        best = None
+        for order, (layout, text) in enumerate(readings):
+            verdict = self.confidence(typed_text, typed_layout, text, layout)
+            if verdict is None:
+                continue
+            tier, margin = verdict
+            rank = (tier, margin if tier == self.STATISTICS else 0, -order)
+            if best is None or rank > best[0]:
+                best = (rank, (layout, text))
+        return best[1] if best else None
 
     def could_be_meant(self, typed_text, typed_layout, intended_text, other_layout):
         """Looser test for short words right before a switched one ("ye b" + "что" -> "ну и что")."""
@@ -238,9 +280,9 @@ class Judge:
             return False
         if len(intended) == 1:
             return intended.lower() in SINGLE_LETTER_WORDS[other_layout]
-        if not self._is_word(intended, other_layout):
+        if not self.is_word(intended, other_layout):
             return False
         typed = word_core(typed_text, typed_layout)
-        if typed is None or not self._is_word(typed, typed_layout):
+        if typed is None or not self.is_word(typed, typed_layout):
             return True
         return self.models[other_layout].score(intended) > self.models[typed_layout].score(typed)
